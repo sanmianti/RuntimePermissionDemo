@@ -23,7 +23,8 @@ public class BaseActivity extends AppCompatActivity {
 
     private RequestPermissionCallBack mRequestPermissionCallBack;
     private final int mRequestCode = 1024;
-    private String[] mPermissionsName;
+    private String mPermissionsName;//权限中文名称，提示用户时用
+
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -40,42 +41,46 @@ public class BaseActivity extends AppCompatActivity {
     @Override
     public void onRequestPermissionsResult(int requestCode, @NonNull String[] permissions, @NonNull int[] grantResults) {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults);
+        boolean hasAllGranted = true;
         switch (requestCode) {
             case mRequestCode: {
-                if (grantResults.length > 0
-                        && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
-                    mRequestPermissionCallBack.granted();
+                for (int i = 0; i < grantResults.length; ++i) {
+                    if (grantResults[i] == PackageManager.PERMISSION_DENIED) {
+                        hasAllGranted = false;
+                        //在用户已经拒绝授权的情况下，如果shouldShowRequestPermissionRationale返回false则
+                        // 可以推断出用户选择了“不在提示”选项，在这种情况下需要引导用户至设置页手动授权
+                        if (!ActivityCompat.shouldShowRequestPermissionRationale(this, permissions[0])) {
+                            new AlertDialog.Builder(this)
+                                    .setMessage("用户选择了不在提示按钮，或者系统默认不在提示（如MIUI）。提醒用户：" +
+                                            "获取相关权限失败，将导致部分功能无法正常使用，需要到设置页面手动授权")
+                                    .setPositiveButton("去授权", new DialogInterface.OnClickListener() {
+                                        @Override
+                                        public void onClick(DialogInterface dialog, int which) {
+                                            Intent intent = new Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS);
+                                            Uri uri = Uri.fromParts("package", getApplicationContext().getPackageName(), null);
+                                            intent.setData(uri);
+                                            startActivity(intent);
+                                        }
+                                    })
+                                    .setNegativeButton("取消", new DialogInterface.OnClickListener() {
+                                        @Override
+                                        public void onClick(DialogInterface dialog, int which) {
+                                            mRequestPermissionCallBack.denied();
+                                        }
+                                    }).setOnCancelListener(new DialogInterface.OnCancelListener() {
+                                @Override
+                                public void onCancel(DialogInterface dialog) {
+                                    mRequestPermissionCallBack.denied();
+                                }
+                            }).show();
 
-                } else {
-                    //在用户已经拒绝授权的情况下，如果shouldShowRequestPermissionRationale返回false则
-                    // 可以推断出用户选择了“不在提示”选项，在这种情况下需要引导用户至设置页手动授权
-                    if (!ActivityCompat.shouldShowRequestPermissionRationale(this, permissions[0])) {
-                        new AlertDialog.Builder(this)
-                                .setMessage("用户选择了不在提示按钮，或者系统默认不在提示（如MIUI）。提醒用户：获取"
-                                        + mPermissionsName[0] + "失败，将导致部分功能无法正常使用，需要到设置页面手动授权")
-                                .setPositiveButton("去授权", new DialogInterface.OnClickListener() {
-                                    @Override
-                                    public void onClick(DialogInterface dialog, int which) {
-                                        Intent intent = new Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS);
-                                        Uri uri = Uri.fromParts("package", getApplicationContext().getPackageName(), null);
-                                        intent.setData(uri);
-                                        startActivity(intent);
-                                    }
-                                })
-                                .setNegativeButton("取消", new DialogInterface.OnClickListener() {
-                                    @Override
-                                    public void onClick(DialogInterface dialog, int which) {
-                                        mRequestPermissionCallBack.denied();
-                                    }
-                                }).setOnCancelListener(new DialogInterface.OnCancelListener() {
-                                    @Override
-                                    public void onCancel(DialogInterface dialog) {
-                                        mRequestPermissionCallBack.denied();
-                                    }
-                                }).show();
-
-                    }else {
-                        mRequestPermissionCallBack.denied();
+                        } else {
+                            mRequestPermissionCallBack.denied();
+                        }
+                        break;
+                    }
+                    if (hasAllGranted) {
+                        mRequestPermissionCallBack.granted();
                     }
                 }
             }
@@ -90,42 +95,51 @@ public class BaseActivity extends AppCompatActivity {
      * @param callback
      */
     public void requestPermissions(final Context context, final String[] permissions,
-                                   final String[] permissionNames, RequestPermissionCallBack callback) {
+                                   RequestPermissionCallBack callback) {
         this.mRequestPermissionCallBack = callback;
-        this.mPermissionsName = permissionNames;
 
-        if (ContextCompat.checkSelfPermission(context, permissions[0]) == PackageManager.PERMISSION_GRANTED) {
-            mRequestPermissionCallBack.granted();
-        } else {
-            //用户曾经拒绝过我们的权限请求，再次请求时候弹出对话框向用户解释一下原因
-            if (ActivityCompat.shouldShowRequestPermissionRationale((Activity) context, permissions[0])) {
-                new AlertDialog.Builder(context)
-                        .setMessage("您好，需要" + permissionNames[0] + "，否则将影响部分功能的正常使用。")
-                        .setPositiveButton("确定", new DialogInterface.OnClickListener() {
-                            @Override
-                            public void onClick(DialogInterface dialog, int which) {
-                                ActivityCompat.requestPermissions(((Activity) context), permissions, mRequestCode);
-                            }
-                        }).show();
-            } else {
-                ActivityCompat.requestPermissions(((Activity) context), permissions, mRequestCode);
+        //如果所有权限都已授权，则直接返回授权成功,只要有一项未授权，则发起权限请求
+        boolean isAllGranted = true;
+        for (String permission : permissions) {
+            if (ContextCompat.checkSelfPermission(context, permission) == PackageManager.PERMISSION_DENIED) {
+                isAllGranted = false;
+
+                if (ActivityCompat.shouldShowRequestPermissionRationale((Activity) context, permission)) {
+                    new AlertDialog.Builder(context)
+                            .setMessage("您好，需要相关权限 ，请允许，否则将影响部分功能的正常使用。")
+                            .setPositiveButton("确定", new DialogInterface.OnClickListener() {
+                                @Override
+                                public void onClick(DialogInterface dialog, int which) {
+                                    ActivityCompat.requestPermissions(((Activity) context), permissions, mRequestCode);
+                                }
+                            }).show();
+                } else {
+                    ActivityCompat.requestPermissions(((Activity) context), permissions, mRequestCode);
+                }
+
+                break;
             }
         }
-
+        if (isAllGranted) {
+            mRequestPermissionCallBack.granted();
+            return;
+        }
     }
 
     /**
      * 权限请求结果回调接口
      */
-     interface RequestPermissionCallBack {
+    interface RequestPermissionCallBack {
         /**
          * 同意授权
          */
-        public  void granted();
+        public void granted();
 
         /**
          * 取消授权
          */
-        public  void denied();
+        public void denied();
     }
 }
+
+

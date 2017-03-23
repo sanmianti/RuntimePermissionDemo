@@ -18,8 +18,25 @@ public class MainActivity extends BaseActivity {
 
     }
 
-    public void requestPermission(View view){
-        requestPermissions(this, new String[]{Manifest.permission.WRITE_EXTERNAL_STORAGE},new String[]{"存储权限"},new RequestPermissionCallBack() {
+    public void requestSinglePermission(View view){
+        requestPermissions(this, new String[]{Manifest.permission.WRITE_EXTERNAL_STORAGE},new RequestPermissionCallBack() {
+            @Override
+            public void granted() {
+                Toast.makeText(MainActivity.this, "获取权限成功，执行正常操作", Toast.LENGTH_LONG).show();
+            }
+
+            @Override
+            public void denied() {
+                Toast.makeText(MainActivity.this, "获取权限失败，正常功能受到影响", Toast.LENGTH_LONG).show();
+            }
+        });
+    }
+
+    public void requestMultiPermission(View view){
+        requestPermissions(this, new String[]{Manifest.permission.CAMERA,
+                Manifest.permission.ACCESS_FINE_LOCATION,
+                        Manifest.permission.READ_CONTACTS},
+                new RequestPermissionCallBack() {
             @Override
             public void granted() {
                 Toast.makeText(MainActivity.this, "获取权限成功，执行正常操作", Toast.LENGTH_LONG).show();
